@@ -1,2 +1,2 @@
 # atividades-praticas-embarcados
-Repositório destinado à atividades práticas da disciplina de sistemas embarcados
+Repositório destinado às atividades práticas da disciplina de sistemas embarcados
