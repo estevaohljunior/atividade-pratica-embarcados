@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -26,11 +28,10 @@
 #define I2C_MASTER_FREQ_HZ 100000
 
 // Debounce parameters
-#define DEBOUNCE_TIME_US 200000 // 200ms debounce
+#define DEBOUNCE_TIME_US 50000 // 50ms debounce (mais responsivo)
 
 // Global variables
 static uint8_t counter = 0;
-static uint8_t step = 1;
 static int64_t last_press_a = 0;
 static int64_t last_press_b = 0;
 
@@ -44,32 +45,31 @@ void update_leds(uint8_t value) {
 }
 
 void update_pwm(uint8_t value) {
-    uint32_t duty = (value * (8191)) / 15; // PWM 13-bit resolution
+    // PWM 13-bit resolution (0-8191)
+    uint32_t duty = (value * 8191) / 15; // Escala de 0-15 para 0-8191
     ledc_set_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, duty);
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
 }
 
 void update_lcd(uint8_t value) {
     char buf[20];
-
+    
+    // Primeira linha: Hexadecimal
     lcd_i2c_cursor_set(&lcd, 0, 0);
     snprintf(buf, sizeof(buf), "Hex: 0x%X", value);
-    for (char *c = buf; *c; c++) {
-        lcd_i2c_write(&lcd, 1, *c);
-    }
-
+    lcd_i2c_print(&lcd, buf);
+    
+    // Segunda linha: Decimal
     lcd_i2c_cursor_set(&lcd, 0, 1);
     snprintf(buf, sizeof(buf), "Dec: %d", value);
-    for (char *c = buf; *c; c++) {
-        lcd_i2c_write(&lcd, 1, *c);
-    }
+    lcd_i2c_print(&lcd, buf);
 }
 
 static void IRAM_ATTR button_a_isr_handler(void *arg) {
     int64_t now = esp_timer_get_time();
     if ((now - last_press_a) > DEBOUNCE_TIME_US) {
         last_press_a = now;
-        counter = (counter + step) & 0x0F;
+        counter = (counter + 1) & 0x0F; // Incrementa e mantém 4 bits
         update_leds(counter);
         update_pwm(counter);
         update_lcd(counter);
@@ -80,7 +80,10 @@ static void IRAM_ATTR button_b_isr_handler(void *arg) {
     int64_t now = esp_timer_get_time();
     if ((now - last_press_b) > DEBOUNCE_TIME_US) {
         last_press_b = now;
-        step = (step == 1) ? 2 : 1;
+        counter = (counter - 1) & 0x0F; // Decrementa e mantém 4 bits
+        update_leds(counter);
+        update_pwm(counter);
+        update_lcd(counter);
     }
 }
 
@@ -144,13 +147,19 @@ void app_main(void) {
     gpio_isr_handler_add(BUTTON_A, button_a_isr_handler, NULL);
     gpio_isr_handler_add(BUTTON_B, button_b_isr_handler, NULL);
 
-    // I2C and LCD
+    // I2C and LCD initialization
     i2c_master_init();
+    
+    
     lcd.address = 0x27;
     lcd.num = I2C_MASTER_NUM;
     lcd.backlight = 1;
     lcd.size = DISPLAY_16X02;
+    
+    // Inicializa o LCD
     lcd_i2c_init(&lcd);
+    lcd_i2c_write(&lcd, 0, CLEAR_DISPLAY);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     // Initial update
     update_leds(counter);
@@ -158,6 +167,6 @@ void app_main(void) {
     update_lcd(counter);
 
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Loop principal ocioso
+        vTaskDelay(pdMS_TO_TICKS(100)); // Loop principal ocioso
     }
 }
