@@ -1,4 +1,4 @@
-## Atividades Práticas da Disciplina de Sistemas Embarcados
+## Atividades Práticas Sistemas Embarcados
 ### Engenharia de Computação
 
 
